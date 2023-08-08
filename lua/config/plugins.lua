@@ -1,4 +1,4 @@
-local M = {
+return {
   {
     "folke/tokyonight.nvim",
     lazy = false,
@@ -11,7 +11,7 @@ local M = {
       },
     },
     config = function()
-      vim.cmd[[colorscheme tokyonight]]
+      vim.cmd("colorscheme tokyonight")
     end,
   },
   {
@@ -63,55 +63,43 @@ local M = {
     },
     opts = {
       servers = {
-        lua_ls = {}
+        lua_ls = {
+          Lua = {
+            diagnostics = {
+              globals = { "vim" },
+            },
+            workspace = {
+              library = {
+                [vim.fn.expand("$VIMRUNTIME/lua")] = true,
+                [vim.fn.expand("$VIMRUNTIME/lua/vim/lsp")] = true,
+                [vim.fn.stdpath("data") .. "lazy/lazy.nvim/lua/lazy"] = true,
+              },
+              maxPreload = 100000,
+              preloadFileSize = 100000,
+            },
+          },
+        },
       },
-      setup = {
-
-      }
     },
     config = function(_, opts)
       local lsp = require("lspconfig")
       local servers = opts.servers
       local capabilities = require("cmp_nvim_lsp").default_capabilities(vim.lsp.protocol.make_client_capabilities())
-      
-      -- TODO: simplify this
-      local function setup(server)
-        local server_opts = vim.tbl_deep_extend("force", {
-          capabilities = vim.deepcopy(capabilities)
-        }, servers[server] or {})
+      local mlsp = require("mason-lspconfig")
 
-        if opts.setup[server] then
-          if opts.setup[server](server, server_opts) then
-            return
-          end
-        elseif opts.setup["*"] then
-          if opts.setup["*"](server, server_opts) then
-            return
-          end
-        end
-        lsp[server].setup(server_opts)
+      local function setup(server)
+        lsp[server].setup({
+          capabilities = capabilities,
+          settings = servers[server] or {},
+        })
       end
 
-      local mlsp = require("mason-lspconfig")
-      local available = mlsp.get_available_servers()
-      
-      -- TODO: remove this
-      local ensure_installed = {}
-      for server, server_opts in pairs(servers) do
-        if server_opts then
-          server_opts = server_opts == true and {} or server_opts
-
-          if server_opts.mason == false or not vim.tbl_contains(available, server) then
-            setup(server)
-          else
-            ensure_installed[#ensure_installed + 1] = server
-          end
-        end
+      for server, _ in pairs(servers) do
+        setup(server)
       end
 
       require("mason").setup()
       mlsp.setup({
-        ensure_installed = ensure_installed,
         automatic_installation = true,
       })
       mlsp.setup_handlers({setup})
@@ -139,11 +127,18 @@ local M = {
           { name = "luasnip", keyword_length = 2, },
           { name = "path", },
           { name = "buffer", keyword_length = 3, },
-        }
+        },
+        enabled = function()
+          local context = require("cmp.config.context")
+          if vim.api.nvim_get_mode().mode == "c" then
+            return true
+          else
+            return not context.in_treesitter_capture("comment")
+              and not context.in_syntax_group("comment")
+          end
+        end
       })
 
     end
   },
 }
-
-return M
